@@ -1,0 +1,31 @@
+package emissary.core;
+
+import emissary.pickup.file.FilePickUpPlace;
+import emissary.test.core.junit5.UnitTest;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class FilePickUpPlaceHealthCheckTest extends UnitTest {
+
+    @BeforeEach
+    public void configureTestLoggers() {
+
+    }
+
+    @Test
+    void testWhenThereIsNoPickUpPlace() {
+        FilePickUpPlaceHealthCheck f = new FilePickUpPlaceHealthCheck(10, 1000);
+        assertTrue(f.execute().isHealthy(), "Health check should pass when no Client");
+    }
+
+    @Test
+    void testWhenThereIsAPickUpPlace() throws Exception {
+        FilePickUpPlace fpc = new FilePickUpPlace();
+        FilePickUpPlaceHealthCheck f = new FilePickUpPlaceHealthCheck(10, 1000);
+        assertTrue(f.execute().isHealthy(), "Health check should pass when client is fresh");
+        fpc.shutDown();
+    }
+}

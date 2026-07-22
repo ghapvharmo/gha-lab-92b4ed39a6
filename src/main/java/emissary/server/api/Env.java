@@ -1,0 +1,80 @@
+package emissary.server.api;
+
+import emissary.client.response.MapResponseEntity;
+import emissary.command.ServerCommand;
+import emissary.core.Namespace;
+import emissary.core.NamespaceException;
+import emissary.server.EmissaryServer;
+
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Map;
+
+/**
+ * The env Emissary API endpoint that returns key=value pairs of config info for the running node
+ * <p>
+ * Suitable for parsing or sourcing in bash, as the 'env.sh' command calls it calls.
+ */
+@Path("")
+// context is /api
+public class Env {
+
+    public static final String EMISSARY_SERVER = "EmissaryServer";
+    private final Logger logger = LoggerFactory.getLogger(this.getClass());
+
+    @GET
+    @Path("/env")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getEnvJson() {
+        return Response.ok().entity(getEnv()).build();
+    }
+
+    @GET
+    @Path("/env.sh")
+    @Produces(MediaType.TEXT_PLAIN)
+    public Response getEnvForBash() {
+        return Response.ok().entity(envString()).build();
+    }
+
+    private MapResponseEntity getEnv() {
+        MapResponseEntity entity = new MapResponseEntity();
+        try {
+            EmissaryServer server = (EmissaryServer) Namespace.lookup(EMISSARY_SERVER);
+            ServerCommand command = server.getServerCommand();
+            entity.addKeyValue("CONFIG_DIR", command.getConfig().toAbsolutePath().toString());
+            entity.addKeyValue("PROJECT_BASE", command.getProjectBase().toAbsolutePath().toString());
+            entity.addKeyValue("OUTPUT_ROOT", command.getOutputDir().toAbsolutePath().toString());
+            entity.addKeyValue("BIN_DIR", command.getBinDir().toAbsolutePath().toString());
+            entity.addKeyValue("HOST", command.getHost());
+            entity.addKeyValue("PORT", Integer.toString(command.getPort()));
+            entity.addKeyValue("SCHEME", command.getScheme());
+            logger.debug("Returning env: {}", entity.getResponse());
+        } catch (NamespaceException e) {
+            logger.error("Error looking up namespace \"EMISSARY_SERVER\": {}", e.getMessage());
+            entity.addError("Error looking up namespace \"" + EMISSARY_SERVER + "\"");
+        }
+        return entity;
+    }
+
+    private String envString() {
+        StringBuilder sb = new StringBuilder();
+        MapResponseEntity entity = getEnv();
+        if (entity.getErrors().size() > 0) {
+            for (String msg : entity.getErrors()) {
+                sb.append(msg + "\n");
+            }
+        } else {
+            for (Map.Entry<String, String> entry : entity.getResponse().entrySet()) {
+                sb.append("export " + entry.getKey() + "=\"" + entry.getValue() + "\"\n");
+            }
+        }
+        return sb.toString();
+    }
+
+}

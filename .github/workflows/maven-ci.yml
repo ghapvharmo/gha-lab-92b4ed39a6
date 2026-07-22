@@ -1,0 +1,102 @@
+---
+name: Java CI with Maven
+
+on: # yamllint disable-line rule:truthy
+  push:
+    branches: [main, release/**, patch/**]
+  pull_request:
+    branches: [main, release/**, patch/**]
+
+jobs:
+  build:
+    name: Standard build on Java ${{ matrix.java-version }} with compiler target ${{ matrix.java-compiler }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java-compiler: ['11', '17']
+        java-version: ['17']
+        experimental: [false]
+        include:
+          - java-compiler: '11'
+            java-version: '11'
+            experimental: false
+    continue-on-error: ${{ matrix.experimental }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure Java & Maven
+        uses: actions/setup-java@v4
+        with:
+          java-version: '${{ matrix.java-version }}'
+          cache: "maven"
+          distribution: "corretto"
+
+      - name: Build with Maven
+        run: mvn -B -e -ntp "-Dstyle.color=always" -Dmaven.compiler.release=${{ matrix.java-compiler }} verify
+
+      - name: Verify Changed Files
+        run: contrib/ci/detect-changes.sh
+
+  site-build:
+    name: Standard maven site build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure Java & Maven
+        uses: actions/setup-java@v4
+        with:
+          java-version: 11
+          cache: "maven"
+          distribution: "corretto"
+
+      - name: Build with Maven
+        run: mvn -B -e -ntp "-Dstyle.color=always" site
+
+  error-prone-build:
+    name: Maven build using errorProne profile
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure Java & Maven
+        uses: actions/setup-java@v4
+        with:
+          java-version: 11
+          cache: "maven"
+          distribution: "corretto"
+
+      - name: Build with Maven
+        run: mvn -B -e -ntp "-Dstyle.color=always" -PerrorProne verify -DskipTests
+
+  slack-notify:
+    if: ${{ github.event_name == 'push' }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish to slack channel via bot token
+        id: slack
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "emissary-main -- Commit: <${{ github.event.pull_request.html_url || github.event.head_commit.url }}|${{ github.sha }}> merged by ${{ github.actor }}.\nCI Job Status: *${{ join(needs.*.result, ' ')}}*"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
